@@ -1,0 +1,113 @@
+#!/bin/bash
+#
+# Setup files for using WP CLI from host machine.
+# See https://github.com/salcode/ssh-into-local-by-flywheel/issues/5
+
+# When tput is present, set colors.
+if [[ ! -z $(which tput 2>/dev/null) ]]; then
+	normal=$(tput sgr0)
+	bold=$(tput bold)
+	red=$(tput setaf 1)
+	green=$(tput setaf 2)
+	yellow=$(tput setaf 3)
+	magenta=$(tput setaf 5)
+	cyan=$(tput setaf 6)
+fi
+
+__wpcli_lbf_setup__show_help() {
+	cat <<HELP
+
+${bold} USAGE: ${normal}
+	wpcli-lbf-setup [--help|-h] [--force|-f]
+
+${bold} OPTIONS: ${normal}
+	--help,  -h        Show this help and usage
+	--force, -f        Overwrite previously created configuration files
+
+${bold} EXAMPLES: ${normal}
+
+	wpcli-lbf-setup
+
+HELP
+}
+
+force=0
+while [ ! $# -eq 0 ]
+do
+	case "$1" in
+		--force | -f)
+			force=1
+			;;
+		--help | -h)
+			__wpcli_lbf_setup__show_help
+			exit 0
+			;;
+	esac
+	shift
+done
+
+yml_path=$(pwd)/wp-cli.local.yml;
+php_path=$(pwd)/wp-cli.local.php;
+
+if [ -f "$yml_path" ]; then
+	if [ ${force} -eq 1 ]; then
+		echo "${magenta}Will overwrite existing wp-cli.local.yml${normal}";
+	else
+		echo "${red}Aborting: wp-cli.local.yml already exists${normal}"
+		exit 1;
+	fi
+fi
+
+if [ -f "$php_path" ]; then
+	if [ ${force} -eq 1 ]; then
+		echo "${magenta}Will overwrite existing wp-cli.local.php${normal}";
+	else
+		echo "${red}Aborting: wp-cli.local.php already exists"${normal}
+		exit 1;
+	fi
+fi
+
+printf "Database host [${yellow}192.168.94.100${normal}]: "
+read -r host
+host=${host:-192.168.94.100}
+echo
+
+printf "Database port [${yellow}4002${normal}]: "
+read -r port
+port=${port:-4002}
+echo
+
+echo "${cyan}Creating...${normal} ${yml_path}"
+echo
+cat >"${yml_path}" <<EOL
+path: app/public
+require:
+  - wp-cli.local.php
+EOL
+
+echo "${cyan}Creating...${normal} ${php_path}"
+echo
+cat >"${php_path}" <<EOL
+<?php
+define('DB_HOST', '${host}:${port}');
+define('DB_USER', 'root');
+define('DB_PASSWORD', 'root');
+
+// Only display fatal run-time errors.
+// See http://php.net/manual/en/errorfunc.constants.php.
+error_reporting(1);
+define( 'WP_DEBUG', false );
+EOL
+
+siteurl=`wp option get siteurl 2> /dev/null`
+
+if [ $? -ne 0 ]
+then
+  echo "${red}Could not connect, please re-check your database settings and confirm you're in the correct directory.${normal}"
+  echo
+  exit 1
+fi
+
+echo "${green}Successfully connected to ${siteurl}${normal}"
+echo
+exit 0
